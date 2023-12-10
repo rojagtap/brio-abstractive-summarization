@@ -3,7 +3,6 @@ from functools import partial
 import torch
 from nltk import word_tokenize, sent_tokenize
 from rouge_score.rouge_scorer import RougeScorer
-from tqdm import tqdm
 
 from config import CNNDMConfig, XSumConfig
 from data import BrioDataset, pad_sequences
@@ -44,6 +43,8 @@ def train(gpu, train_path, val_path, save_path, dataset):
 
     min_ranking_loss = min_mle_loss = 1e5
     steps, epoch = io.load(model, optimizer)
+
+    print(f"starting training for {len(train_dataloader) - steps} steps")
     for epoch in range(epoch, params.n_epochs):
         avg_loss = avg_mle_loss = avg_ranking_loss = 0
 
@@ -117,10 +118,8 @@ def validate(gpu, val_dataloader, val_gen_dataloader, model, tokenizer, params):
     model.scoring_mode()
 
     n_samples = 0
-    with torch.no_grad(), tqdm(val_dataloader, unit="batch") as tepoch:
-        for step, batch in enumerate(tepoch):
-            tepoch.set_description(f"val score step {step}")
-
+    with torch.no_grad():
+        for step, batch in enumerate(val_dataloader):
             samples = batch["data"]
             encoder_inputs_batch = batch["encoder_inputs"].to(gpu)
             decoder_inputs_batch = batch["decoder_inputs"].to(gpu)
@@ -142,7 +141,8 @@ def validate(gpu, val_dataloader, val_gen_dataloader, model, tokenizer, params):
                 score_rouge2 += score["rouge2"].fmeasure
                 score_rougelsum += score["rougeLsum"].fmeasure
 
-            tepoch.set_postfix(rouge1=score_rouge1 / n_samples, rouge2=score_rouge2 / n_samples, rougelsum=score_rougelsum / n_samples)
+            if (step + 1) % 100 == 0:
+                print(f"val score step {step}: rouge1={score_rouge1 / n_samples}, rouge2={score_rouge2 / n_samples}, rougelsum={score_rougelsum / n_samples}")
 
     score_rouge1 = score_rouge1 / n_samples
     score_rouge2 = score_rouge2 / n_samples
@@ -154,10 +154,8 @@ def validate(gpu, val_dataloader, val_gen_dataloader, model, tokenizer, params):
     model.generation_mode()
 
     n_samples = 0
-    with torch.no_grad(), tqdm(val_gen_dataloader, unit="batch") as tepoch:
-        for step, batch in enumerate(tepoch):
-            tepoch.set_description(f"val gen step {step}")
-
+    with torch.no_grad():
+        for step, batch in enumerate(val_gen_dataloader):
             articles = [" ".join(sample["article_untok"]) for sample in batch["data"]]
             inputs = tokenizer.batch_encode_plus(articles, max_length=params.encoder_maxlen, return_tensors="pt", padding="max_length", truncation=True)
 
@@ -188,7 +186,8 @@ def validate(gpu, val_dataloader, val_gen_dataloader, model, tokenizer, params):
                 gen_rouge2 += score["rouge2"].fmeasure
                 gen_rougelsum += score["rougeLsum"].fmeasure
 
-            tepoch.set_postfix(rouge1=gen_rouge1 / n_samples, rouge2=gen_rouge2 / n_samples, rougelsum=gen_rougelsum / n_samples)
+            if (step + 1) % 100 == 0:
+                print(f"val gen step {step}: rouge1={gen_rouge1 / n_samples}, rouge2={gen_rouge2 / n_samples}, rougelsum={gen_rougelsum / n_samples}")
 
     gen_rouge1 = gen_rouge1 / n_samples
     gen_rouge2 = gen_rouge2 / n_samples
