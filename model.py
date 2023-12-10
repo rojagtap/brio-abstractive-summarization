@@ -266,12 +266,12 @@ class BartScorer(BartPretrainedModel):
 
 
 class BRIO(torch.nn.Module):
-    def __init__(self, pad_token_id):
+    def __init__(self, pad_token_id, model_name="facebook/bart-large"):
         super(BRIO, self).__init__()
-        self.model = BartScorer.from_pretrained("facebook/bart-base", cache_dir="./local_cache")
+        self.model = BartScorer.from_pretrained(model_name, cache_dir="./local_cache")
         self.pad_token_id = pad_token_id
 
-    def forward(self, input_ids, candidate_ids, normalize=True, score_mode="base", length_penalty=1, require_gold=True):
+    def forward(self, input_ids, candidate_ids, length_penalty, require_evaluation=True):
         batch_size = input_ids.size(0)
         input_mask = input_ids != self.pad_token_id
         cand_mask = candidate_ids != self.pad_token_id
@@ -299,10 +299,10 @@ class BRIO(torch.nn.Module):
 
         cand_mask = cand_mask.float()
         scores = torch.mul(scores, cand_mask).sum(-1) / (cand_mask.sum(-1) ** length_penalty)  # [bz, cand_num]
-        if require_gold:
-            output = {'scores': scores[:, 1:], "summary_score": scores[:, 0], "probs": probs}
+        if require_evaluation:
+            output = {'candidate_scores': scores[:, 1:], 'summary_score': scores[:, 0], 'probs': probs}
         else:
-            output = {'scores': scores, "probs": probs}
+            output = {'candidate_scores': scores, 'probs': probs}
         return output
 
     def scoring_mode(self):
