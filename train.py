@@ -92,6 +92,8 @@ def train(gpu, train_path, val_path, save_path, dataset):
 
             # validation every 1000 steps
             if (steps + 1) % 1000 == 0:
+                io.checkpoint(steps, epoch, model, optimizer)
+
                 result = validate(gpu, val_dataloader, val_gen_dataloader, model, val_set.tokenizer, params)
 
                 mle_loss = params.eval(result["gen_rouge1"], result["gen_rouge2"], result["gen_rougelsum"])

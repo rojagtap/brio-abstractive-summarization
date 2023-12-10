@@ -2,13 +2,13 @@ class Config:
     model_name = "facebook/bart-large"
     n_epochs = 100
     n_candidates = 16
-    val_batch_size = 1
-    val_gen_batch_size = 8
+    val_batch_size = 1 * 4
+    val_gen_batch_size = 8 * 4
 
 
 class CNNDMConfig(Config):
     n_beams = 4
-    train_batch_size = 1
+    train_batch_size = 1 * 4
     length_penalty = 2.0
     accumulation_steps = 8
     decoder_maxlen = 128
