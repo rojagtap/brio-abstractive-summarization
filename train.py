@@ -194,6 +194,9 @@ def validate(gpu, val_dataloader, val_gen_dataloader, model, tokenizer, params):
     gen_rouge2 = gen_rouge2 / n_samples
     gen_rougelsum = gen_rougelsum / n_samples
 
+    model.train()
+    model.scoring_mode()
+
     return {
         "mle_loss": mle_loss,
         "score_rouge1": score_rouge1,
