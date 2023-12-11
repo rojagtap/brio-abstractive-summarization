@@ -48,8 +48,9 @@ def train(gpu, train_path, val_path, save_path, dataset):
     for epoch in range(epoch, params.n_epochs):
         avg_loss = avg_mle_loss = avg_ranking_loss = 0
 
+        # continue from checkpoint
         optimizer.zero_grad()
-        for step, batch in enumerate(train_dataloader):
+        for step, batch in enumerate(train_dataloader, start=steps * params.accumulation_steps):
             encoder_inputs_batch = batch["encoder_inputs"].to(gpu)
             decoder_inputs_batch = batch["decoder_inputs"].to(gpu)
 
@@ -162,8 +163,8 @@ def validate(gpu, val_dataloader, val_gen_dataloader, model, tokenizer, params):
             summaries = model.generate(
                 input_ids=inputs["input_ids"].to(gpu),
                 attention_mask=inputs["attention_mask"].to(gpu),
-                max_length=params.decoder_maxlen + 2,   # +2 from original because we start at step=1 and stop before max_length
-                min_length=params.decoder_minlen + 1,   # +1 from original because we start at step=1
+                max_length=params.generation_maxlen + 2,   # +2 from original because we start at step=1 and stop before max_length
+                min_length=params.generation_minlen + 1,   # +1 from original because we start at step=1
                 no_repeat_ngram_size=3,
                 num_beams=params.n_beams,
                 length_penalty=params.length_penalty,

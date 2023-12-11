@@ -9,12 +9,15 @@ class IO:
     def __init__(self, base_dir, checkpoint_dir, logdir):
         self.base_dir = base_dir
         self.checkpoint_dir = os.path.join(self.base_dir, checkpoint_dir)
-        self.logdir = os.path.join(self.base_dir, logdir, datetime.now().strftime("%Y%m%d%H%M%S"))
 
         if not os.path.isdir(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
 
-        if not os.path.isdir(self.logdir):
+        if len(os.listdir(os.path.join(self.base_dir, logdir))) > 0:
+            latest = sorted(os.listdir(os.path.join(self.base_dir, logdir)))[-1]
+            self.logdir = os.path.join(self.base_dir, logdir, latest)
+        else:
+            self.logdir = os.path.join(self.base_dir, logdir, datetime.now().strftime("%Y%m%d%H%M%S"))
             os.makedirs(self.logdir)
 
         self.writer = tensorboard.SummaryWriter(self.logdir, flush_secs=60)
