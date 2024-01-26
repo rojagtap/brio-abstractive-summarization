@@ -65,7 +65,7 @@ class BrioDataset(torch.utils.data.Dataset):
         candidates = candidates[:self.n_candidates]
 
         encoder_inputs = self.tokenizer.batch_encode_plus([" ".join(article)], max_length=self.encoder_maxlen, return_tensors="pt", padding=False, truncation=True)["input_ids"].squeeze(0)
-        decoder_inputs = self.tokenizer.batch_encode_plus([" ".join(abstract)] + [" ".join(x[0]) for x in candidates], max_length=self.decoder_maxlen, return_tensors="pt", padding=True, truncation=True)["input_ids"]
+        decoder_inputs = self.tokenizer.batch_encode_plus([" ".join(abstract)] + [" ".join(candidate[0]) for candidate in candidates], max_length=self.decoder_maxlen, return_tensors="pt", padding=True, truncation=True)["input_ids"]
 
         inputs = {
             "encoder_inputs": encoder_inputs,

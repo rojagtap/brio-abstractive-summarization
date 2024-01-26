@@ -96,6 +96,7 @@ class CustomBartModel(BartPretrainedModel):
             decoder_attention_mask = decoder_attention_mask.view(-1, decoder_attention_mask.size(-1))
         else:
             encoder_hidden_states = encoder_outputs[0]
+
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -145,12 +146,12 @@ class BartScorer(BartPretrainedModel):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def resize_token_embeddings(self, new_num_tokens: int) -> torch.nn.Embedding:
+    def resize_token_embeddings(self, new_num_tokens):
         new_embeddings = super().resize_token_embeddings(new_num_tokens)
         self._resize_final_logits_bias(new_num_tokens)
         return new_embeddings
 
-    def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
+    def _resize_final_logits_bias(self, new_num_tokens):
         old_num_tokens = self.final_logits_bias.shape[-1]
         if new_num_tokens <= old_num_tokens:
             new_bias = self.final_logits_bias[:, :new_num_tokens]
