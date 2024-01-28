@@ -30,8 +30,11 @@ def train(gpu, train_path, val_path, save_path, dataset):
     val_gen_dataloader = torch.utils.data.DataLoader(val_set, batch_size=params.val_gen_batch_size, shuffle=False, num_workers=4, collate_fn=val_padding_fn)
 
     model = BRIO(train_set.tokenizer.pad_token_id, model_name=params.model_name)
-    ranking_loss_fn = RankingLoss()
-    mle_loss_fn = LabelSmoothingLoss(ignore_index=train_set.tokenizer.pad_token_id, epsilon=0.1)
+    mle_loss_fn = LabelSmoothingLoss(ignore_index=train_set.tokenizer.pad_token_id,
+                                     epsilon=params.label_smoothing_epsilon)
+    ranking_loss_fn = RankingLoss(candidate_ranking_margin=params.candidate_scores_ranking_loss_margin,
+                                  summary_ranking_margin=params.summary_score_ranking_loss_margin,
+                                  summary_ranking_loss_weight=params.summary_score_ranking_weight)
     optimizer = torch.optim.Adam(model.parameters())
 
     io = IO(base_dir=save_path, checkpoint_dir='checkpoints', logdir='logs')
@@ -50,32 +53,36 @@ def train(gpu, train_path, val_path, save_path, dataset):
 
         # continue from checkpoint
         optimizer.zero_grad()
-        for step, batch in enumerate(train_dataloader, start=steps * params.accumulation_steps):
+        for step, batch in enumerate(train_dataloader, start=steps * params.loss_accumulation_steps):
             encoder_inputs_batch = batch["encoder_inputs"].to(gpu)
             decoder_inputs_batch = batch["decoder_inputs"].to(gpu)
 
-            output = model(encoder_inputs_batch, decoder_inputs_batch, length_penalty=params.length_penalty)
+            output = model(encoder_inputs_batch, decoder_inputs_batch, length_penalty=params.length_penalty, use_log_softmax=params.use_log_softmax)
             candidate_scores, summary_score, logits = output["candidate_scores"], output["summary_score"], output["probs"][:, :-1]
 
             ranking_loss = ranking_loss_fn(candidate_scores, summary_score)
             mle_loss = mle_loss_fn(logits.transpose(1, 2), decoder_inputs_batch[:, 0, 1:])
 
-            loss = 10 * ranking_loss + 0.1 * mle_loss
+            loss = params.ranking_loss_weight * ranking_loss + params.mle_loss_weight * mle_loss
 
-            avg_loss += loss.item() / params.accumulation_steps
-            avg_mle_loss += mle_loss.item() / params.accumulation_steps
-            avg_ranking_loss += ranking_loss.item() / params.accumulation_steps
+            avg_loss += loss.item() / params.loss_accumulation_steps
+            avg_mle_loss += mle_loss.item() / params.loss_accumulation_steps
+            avg_ranking_loss += ranking_loss.item() / params.loss_accumulation_steps
 
-            loss = loss / params.accumulation_steps
+            loss = loss / params.loss_accumulation_steps
             loss.backward()
 
             # accumulate losses in model.trainable_param.grad at every step
             # and apply after 'accumulation_steps' steps
-            if (step + 1) % params.accumulation_steps == 0:
+            if (step + 1) % params.loss_accumulation_steps == 0:
                 steps += 1
 
+                # apply gradient clipping
+                if params.grad_norm_clipping:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), params.grad_norm_clipping)
+
                 # adjust learning rate
-                lr = 2e-3 * min(steps ** (-0.5), steps * (10000 ** (-1.5)))
+                lr = params.max_learning_rate * min(steps ** (-0.5), steps * (params.n_warmup_steps ** (-1.5)))
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr
 
@@ -113,7 +120,7 @@ def train(gpu, train_path, val_path, save_path, dataset):
 def validate(gpu, val_dataloader, val_gen_dataloader, model, tokenizer, params):
     score_rouge1 = score_rouge2 = score_rougelsum = 0
     rouge_scorer = RougeScorer(['rouge1', 'rouge2', 'rougeLsum'], use_stemmer=True)
-    mle_loss_fn = LabelSmoothingLoss(ignore_index=tokenizer.pad_token_id, epsilon=0.1)
+    mle_loss_fn = LabelSmoothingLoss(ignore_index=tokenizer.pad_token_id, epsilon=params.label_smoothing_epsilon)
 
     model.eval()
     model.scoring_mode()
@@ -125,7 +132,7 @@ def validate(gpu, val_dataloader, val_gen_dataloader, model, tokenizer, params):
             encoder_inputs_batch = batch["encoder_inputs"].to(gpu)
             decoder_inputs_batch = batch["decoder_inputs"].to(gpu)
 
-            output = model(encoder_inputs_batch, decoder_inputs_batch, length_penalty=params.length_penalty)
+            output = model(encoder_inputs_batch, decoder_inputs_batch, length_penalty=params.length_penalty, use_log_softmax=params.use_log_softmax)
             candidate_scores, summary_score, logits = output["candidate_scores"].cpu().numpy(), output["summary_score"], output["probs"][:, :-1]
 
             mle_loss = mle_loss_fn(logits.transpose(1, 2), decoder_inputs_batch[:, 0, 1:])

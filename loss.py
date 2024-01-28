@@ -29,33 +29,35 @@ class LabelSmoothingLoss(torch.nn.Module):
 
 
 class RankingLoss(torch.nn.Module):
-    def __init__(self, margin=0.001, gold_margin=0, gold_weight=0):
+    def __init__(self, candidate_ranking_margin=0.001, summary_ranking_margin=0, summary_ranking_loss_weight=0):
         super(RankingLoss, self).__init__()
-        self.margin = margin
-        self.gold_margin = gold_margin
-        self.gold_weight = gold_weight
+        self.candidate_ranking_margin = candidate_ranking_margin
+        self.summary_ranking_margin = summary_ranking_margin
+        self.summary_ranking_loss_weight = summary_ranking_loss_weight
 
-    def forward(self, scores, summary_score):
-        ones = torch.ones_like(scores)
+    def forward(self, candidate_scores, summary_score):
+        ones = torch.ones_like(candidate_scores)
         loss_func = torch.nn.MarginRankingLoss(0.0)
-        totalloss = loss_func(scores, scores, ones)
+        total_loss = loss_func(candidate_scores, candidate_scores, ones)
+
         # candidate loss
-        for i in range(1, scores.size(1)):
-            positive_score = scores[:, :-i]
-            negative_score = scores[:, i:]
-            positive_score = positive_score.contiguous().view(-1)
-            negative_score = negative_score.contiguous().view(-1)
-            ones = torch.ones_like(positive_score)
-            loss_func = torch.nn.MarginRankingLoss(self.margin * i)
-            loss = loss_func(positive_score, negative_score, ones)
-            totalloss += loss
+        for i in range(1, candidate_scores.size(1)):
+            high_rank = candidate_scores[:, :-i]
+            low_rank = candidate_scores[:, i:]
+            high_rank = high_rank.contiguous().view(-1)
+            low_rank = low_rank.contiguous().view(-1)
+            ones = torch.ones_like(high_rank)
+            loss_func = torch.nn.MarginRankingLoss(self.candidate_ranking_margin * i)       # λij = λ * rank difference
+            loss = loss_func(high_rank, low_rank, ones)
+            total_loss += loss
 
         # predicted summary loss
-        positive_score = summary_score.unsqueeze(-1).expand_as(scores)
-        negative_score = scores
-        positive_score = positive_score.contiguous().view(-1)
-        negative_score = negative_score.contiguous().view(-1)
-        ones = torch.ones_like(positive_score)
-        loss_func = torch.nn.MarginRankingLoss(self.gold_margin)
-        totalloss += self.gold_weight * loss_func(positive_score, negative_score, ones)
-        return totalloss
+        high_rank = summary_score.unsqueeze(-1).expand_as(candidate_scores)
+        low_rank = candidate_scores
+        high_rank = high_rank.contiguous().view(-1)
+        low_rank = low_rank.contiguous().view(-1)
+        ones = torch.ones_like(high_rank)
+        loss_func = torch.nn.MarginRankingLoss(self.summary_ranking_margin)
+        total_loss += self.summary_ranking_loss_weight * loss_func(high_rank, low_rank, ones)
+
+        return total_loss

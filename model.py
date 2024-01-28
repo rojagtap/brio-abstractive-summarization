@@ -267,12 +267,12 @@ class BartScorer(BartPretrainedModel):
 
 
 class BRIO(torch.nn.Module):
-    def __init__(self, pad_token_id, model_name="facebook/bart-large"):
+    def __init__(self, pad_token_id, model_name="facebook/bart-large-cnn"):
         super(BRIO, self).__init__()
         self.model = BartScorer.from_pretrained(model_name, cache_dir="./local_cache")
         self.pad_token_id = pad_token_id
 
-    def forward(self, input_ids, candidate_ids, length_penalty, require_evaluation=True):
+    def forward(self, input_ids, candidate_ids, length_penalty, use_log_softmax=True, require_evaluation=True):
         batch_size = input_ids.size(0)
         input_mask = input_ids != self.pad_token_id
         cand_mask = candidate_ids != self.pad_token_id
@@ -286,8 +286,8 @@ class BRIO(torch.nn.Module):
             output_hidden_states=True
         )
 
-        output = output[0]  # [bz x cand_num, seq_len, word_dim]
-        output = output.view(batch_size, -1, output.size(1), output.size(2))  # [bz, cand_num, seq_len, word_dim]
+        output = output[0]                                                      # [bz x cand_num, seq_len, word_dim]
+        output = output.view(batch_size, -1, output.size(1), output.size(2))    # [bz, cand_num, seq_len, word_dim]
         probs = output[:, 0]
         output = output[:, :, :-1]  # truncate last token
 
@@ -295,8 +295,8 @@ class BRIO(torch.nn.Module):
         cand_mask = candidate_ids != self.pad_token_id
         candidate_ids = candidate_ids.unsqueeze(-1)
 
-        _output = torch.nn.functional.log_softmax(output, dim=3)
-        scores = torch.gather(_output, 3, candidate_ids).squeeze(-1)  # [bz, cand_num, seq_len]
+        _output = torch.nn.functional.log_softmax(output, dim=3) if use_log_softmax else torch.nn.functional.softmax(output, dim=3)
+        scores = torch.gather(_output, 3, candidate_ids).squeeze(-1)        # [bz, cand_num, seq_len]
 
         cand_mask = cand_mask.float()
         scores = torch.mul(scores, cand_mask).sum(-1) / (cand_mask.sum(-1) ** length_penalty)  # [bz, cand_num]
