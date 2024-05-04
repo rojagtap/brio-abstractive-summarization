@@ -1,7 +1,8 @@
 # brio-abstractive-summarization
 Implementation of Liu, Y., et al, "BRIO: Bringing Order to Abstractive Summarization,"
 
-This code is taken from the authors' implementation (https://github.com/yixinL7/BRIO) with certain modifications.
+This is an attempt to reproduce the results from the above paper.
+The code is adapted from the authors' implementation (https://github.com/yixinL7/BRIO) with certain modifications.
 
 To cite this, you can directly cite the original authors of the paper:
 
